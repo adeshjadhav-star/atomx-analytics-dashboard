@@ -2,7 +2,7 @@ import { motion } from 'framer-motion'
 import atomxLogo from '../assets/AtomX_Logo.svg'
 import { dateRanges } from '../data/adminData'
 
-export default function DashboardNav({ config, onConfigChange, onGetData, loading, adminList, apiLive }) {
+export default function DashboardNav({ config, onConfigChange, onGetData, loading, adminList }) {
   return (
     <div
       className="sticky top-0 z-40 w-full"
@@ -69,18 +69,6 @@ export default function DashboardNav({ config, onConfigChange, onGetData, loadin
           )}
         </motion.button>
 
-        {/* Status dot */}
-        <div className="hidden md:flex items-center gap-1.5 text-xs ml-auto"
-          style={{ color: apiLive === false ? '#ef4444' : '#6B7280' }}>
-          <span
-            className="w-1.5 h-1.5 rounded-full"
-            style={{
-              background: apiLive === false ? '#ef4444' : '#22c55e',
-              animation: apiLive === false ? 'none' : 'pulse 2s cubic-bezier(0.4,0,0.6,1) infinite',
-            }}
-          />
-          {apiLive === false ? 'Offline' : 'Live'}
-        </div>
       </div>
     </div>
   )

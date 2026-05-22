@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import DashboardNav from '../components/DashboardNav'
 import SummaryCards from '../components/SummaryCards'
@@ -34,17 +34,15 @@ function LoadingOverlay() {
 export default function DashboardPage({ config: initialConfig, adminList }) {
   const [config, setConfig] = useState(initialConfig)
   const [data, setData] = useState(null)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
-  const [apiLive, setApiLive] = useState(null)
 
   const loadData = useCallback(async (cfg) => {
     setLoading(true)
     setError(null)
     try {
-      const { data: result, live } = await fetchDashboardData(cfg.admin, cfg.dateRange)
+      const { data: result } = await fetchDashboardData(cfg.admin, cfg.dateRange)
       setData(result)
-      setApiLive(live)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load data. Please try again.')
     } finally {
@@ -52,12 +50,9 @@ export default function DashboardPage({ config: initialConfig, adminList }) {
     }
   }, [])
 
-  useEffect(() => {
-    queueMicrotask(() => loadData(config))
-  }, [config, loadData])
-
   const adminName = adminList.find((a) => a.id === config.admin)?.name ?? 'All'
-  const dateLabel = dateRanges.find((d) => d.id === config.dateRange)?.label ?? ''
+  const selectedDateRange = dateRanges.find((d) => d.id === config.dateRange)
+  const periodYear = selectedDateRange?.label.match(/\(([^)]+)\)/)?.[1] ?? selectedDateRange?.label ?? ''
   const hasData = data
     ? data.events.length > 0 ||
       Object.values(data.summary).some((value) => Number(value) > 0) ||
@@ -72,7 +67,6 @@ export default function DashboardPage({ config: initialConfig, adminList }) {
         onGetData={() => loadData(config)}
         loading={loading}
         adminList={adminList}
-        apiLive={apiLive}
       />
 
       <main className="max-w-screen-2xl mx-auto px-4 sm:px-6 py-5 sm:py-8">
@@ -85,7 +79,7 @@ export default function DashboardPage({ config: initialConfig, adminList }) {
             <p className="text-xs mt-1 leading-relaxed" style={{ color: '#6B7280' }}>
               Admin: <span style={{ color: '#1F2A44' }}>{adminName}</span>
               &nbsp;·&nbsp;
-              Period: <span style={{ color: '#1F2A44' }}>{dateLabel}</span>
+              Period: <span style={{ color: '#1F2A44' }}>{periodYear}</span>
             </p>
           </div>
         </div>
