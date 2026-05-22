@@ -1,0 +1,141 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    background-color: #F6F7FB;
+    color: #172033;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  #root {
+    width: 100%;
+    max-width: 100%;
+    margin: 0;
+    text-align: left;
+    border: none;
+    min-height: 100svh;
+  }
+
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: #F6F7FB; }
+  ::-webkit-scrollbar-thumb { background: rgba(23,32,51,0.22); border-radius: 99px; }
+  ::-webkit-scrollbar-thumb:hover { background: rgba(242,106,33,0.45); }
+}
+
+@layer utilities {
+  .card {
+    background: #FFFFFF;
+    border: 1px solid #E5E7EB;
+    border-radius: 12px;
+    box-shadow: 0 10px 30px rgba(15, 23, 42, 0.045);
+  }
+
+  .card-hover {
+    background: #FFFFFF;
+    border: 1px solid #E5E7EB;
+    border-radius: 12px;
+    box-shadow: 0 10px 30px rgba(15, 23, 42, 0.045);
+    transition: border-color 0.2s, box-shadow 0.2s, transform 0.2s;
+  }
+  .card-hover:hover {
+    border-color: rgba(242, 106, 33, 0.26);
+    box-shadow: 0 18px 42px rgba(15, 23, 42, 0.08);
+    transform: translateY(-1px);
+  }
+
+  .select-custom {
+    background-color: #FFFFFF;
+    border: 1px solid #D7DCE5;
+    color: #172033;
+    border-radius: 8px;
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%236B7280' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 14px center;
+    padding-right: 36px;
+    cursor: pointer;
+    transition: border-color 0.2s, box-shadow 0.2s, background-color 0.2s;
+  }
+  .select-custom:focus {
+    outline: none;
+    border-color: rgba(242, 106, 33, 0.5);
+    box-shadow: 0 0 0 3px rgba(242, 106, 33, 0.1);
+  }
+  .select-custom option {
+    background: #FFFFFF;
+    color: #172033;
+  }
+
+  .btn-primary {
+    background: linear-gradient(135deg, #F26A21, #F97316);
+    color: white;
+    font-weight: 600;
+    border-radius: 8px;
+    box-shadow: 0 10px 24px rgba(242, 106, 33, 0.22);
+    transition: box-shadow 0.2s, transform 0.15s, filter 0.2s;
+    cursor: pointer;
+  }
+  .btn-primary:hover {
+    filter: saturate(1.05) brightness(0.98);
+    box-shadow: 0 14px 30px rgba(242, 106, 33, 0.28);
+  }
+  .btn-primary:active { transform: scale(0.98); }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: 99px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+
+  .text-num {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum";
+  }
+
+  .donut-chart {
+    height: 200px;
+    width: 100%;
+    display: block;
+  }
+
+  .chart-scroll-inner {
+    width: 100%;
+  }
+
+  @media (max-width: 640px) {
+    .card,
+    .card-hover {
+      border-radius: 10px;
+    }
+
+    .select-custom,
+    .btn-primary {
+      min-height: 42px;
+    }
+
+    .donut-chart {
+      height: 190px;
+      width: 100%;
+    }
+
+    .recharts-wrapper {
+      overflow: visible;
+    }
+    .recharts-surface {
+      overflow: visible;
+    }
+  }
+}
