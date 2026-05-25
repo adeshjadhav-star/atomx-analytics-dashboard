@@ -6,9 +6,14 @@ function fmt(v) {
   return '₹' + v.toLocaleString('en-IN')
 }
 
+function formatValue(value, isCount) {
+  return isCount ? value.toLocaleString('en-IN') : fmt(value)
+}
+
 function CustomTooltip({ active, payload }) {
   if (!active || !payload?.length) return null
   const d = payload[0]
+  const isCount = d.payload.isCount
   return (
     <div style={{
       background: '#FFFFFF',
@@ -19,10 +24,10 @@ function CustomTooltip({ active, payload }) {
     }}>
       <p style={{ color: '#6B7280', fontSize: 11 }}>{d.name}</p>
       <p style={{ color: '#1F2A44', fontSize: 13, fontWeight: 700 }}>
-        {d.payload.isCount ? d.value.toLocaleString() : fmt(d.value)}
+        {isCount ? 'Count' : 'Amount'}: {formatValue(d.value, isCount)}
       </p>
       <p style={{ color: '#6B7280', fontSize: 11 }}>
-        {((d.percent ?? 0) * 100).toFixed(1)}%
+        Percentage: {((d.percent ?? 0) * 100).toFixed(1)}%
       </p>
     </div>
   )
@@ -33,15 +38,44 @@ function CenterLabel({ viewBox, title, value }) {
   if (!cx || !cy) return null
   return (
     <g>
-      <text x={cx} y={cy - 9} textAnchor="middle" dominantBaseline="middle"
-        style={{ fill: '#9CA3AF', fontSize: 8, fontWeight: 600, letterSpacing: '0.5px' }}>
+      <text x={cx} y={cy - 10} textAnchor="middle" dominantBaseline="middle"
+        style={{ fill: '#1F2A44', fontSize: 12, fontWeight: 700, letterSpacing: 0 }}>
         {title}
       </text>
-      <text x={cx} y={cy + 9} textAnchor="middle" dominantBaseline="middle"
-        style={{ fill: '#1F2A44', fontSize: 13, fontWeight: 700 }}>
-        {value}
+      <text x={cx} y={cy + 10} textAnchor="middle" dominantBaseline="middle"
+        style={{ fill: '#1F2A44', fontSize: 11, fontWeight: 600, letterSpacing: 0 }}>
+        Total: {value}
       </text>
     </g>
+  )
+}
+
+function renderSliceLabel({ cx, cy, midAngle, outerRadius, name, percent }) {
+  if (!percent || percent < 0.04) return null
+
+  const radius = outerRadius + 18
+  const RADIAN = Math.PI / 180
+  const x = cx + radius * Math.cos(-midAngle * RADIAN)
+  const y = cy + radius * Math.sin(-midAngle * RADIAN)
+
+  return (
+    <text
+      x={x}
+      y={y}
+      textAnchor={x > cx ? 'start' : 'end'}
+      dominantBaseline="central"
+      style={{
+        fill: '#1F2A44',
+        fontSize: 11,
+        fontWeight: 700,
+        paintOrder: 'stroke',
+        stroke: '#FFFFFF',
+        strokeWidth: 3,
+        letterSpacing: 0,
+      }}
+    >
+      {name}
+    </text>
   )
 }
 
@@ -51,7 +85,7 @@ function DonutCard({ title, data, centerTitle, centerValue }) {
       <h3 className="font-bold text-sm uppercase tracking-wider mb-4 text-center" style={{ color: '#1F2A44' }}>
         {title}
       </h3>
-      <div style={{ width: '100%', height: 200 }}>
+      <div style={{ width: '100%', height: 240 }}>
         <ResponsiveContainer width="100%" height="100%" debounce={1}>
           <PieChart>
             <Pie
@@ -64,6 +98,8 @@ function DonutCard({ title, data, centerTitle, centerValue }) {
               dataKey="value"
               startAngle={90}
               endAngle={-270}
+              label={renderSliceLabel}
+              labelLine={false}
             >
               {data.map((entry, i) => (
                 <Cell key={i} fill={entry.color} stroke="transparent" />
@@ -93,13 +129,12 @@ function DonutCard({ title, data, centerTitle, centerValue }) {
 }
 
 function PieCard({ title, data }) {
-  const total = data.reduce((s, d) => s + d.value, 0)
   return (
     <div className="card p-4 sm:p-5" style={{ boxShadow: '0 4px 20px rgba(0,0,0,0.05)' }}>
       <h3 className="font-bold text-sm uppercase tracking-wider mb-4 text-center" style={{ color: '#1F2A44' }}>
         {title}
       </h3>
-      <div style={{ width: '100%', height: 200 }}>
+      <div style={{ width: '100%', height: 240 }}>
         <ResponsiveContainer width="100%" height="100%" debounce={1}>
           <PieChart>
             <Pie
@@ -111,6 +146,8 @@ function PieCard({ title, data }) {
               dataKey="value"
               startAngle={90}
               endAngle={-270}
+              label={renderSliceLabel}
+              labelLine={false}
             >
               {data.map((entry, i) => (
                 <Cell key={i} fill={entry.color} stroke="transparent" />
@@ -128,10 +165,7 @@ function PieCard({ title, data }) {
             <div className="min-w-0">
               <p className="text-xs truncate" style={{ color: '#6B7280' }}>{d.name}</p>
               <p className="text-xs font-semibold text-num" style={{ color: '#1F2A44' }}>
-                {fmt(d.value)}{' '}
-                <span style={{ color: '#9CA3AF' }}>
-                  ({total > 0 ? ((d.value / total) * 100).toFixed(1) : 0}%)
-                </span>
+                {fmt(d.value)}
               </p>
             </div>
           </div>
@@ -144,25 +178,38 @@ function PieCard({ title, data }) {
 export default function DistributionCharts({ data }) {
   const txnTotal = data.transactionsDistribution.reduce((s, d) => s + d.value, 0)
   const amtTotal = data.topupAmountDistribution.reduce((s, d) => s + d.value, 0)
+  const hasTopupAmountDistribution = data.topupAmountDistribution.length > 0
+  const hasTransactionsDistribution = data.transactionsDistribution.length > 0
+  const hasTopupPaymentDistribution = data.topupPaymentDistribution.length > 0
+
+  if (!hasTopupAmountDistribution && !hasTransactionsDistribution && !hasTopupPaymentDistribution) {
+    return null
+  }
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
-      <DonutCard
-        title="Topup Amount Distribution"
-        data={data.topupAmountDistribution}
-        centerTitle="TOTAL AMOUNT"
-        centerValue={fmt(amtTotal)}
-      />
-      <DonutCard
-        title="Transactions Distribution"
-        data={data.transactionsDistribution.map((d) => ({ ...d, isCount: true }))}
-        centerTitle="TRANSACTIONS"
-        centerValue={txnTotal.toLocaleString()}
-      />
-      <PieCard
-        title="Topup Distribution"
-        data={data.topupPaymentDistribution}
-      />
+      {hasTopupAmountDistribution && (
+        <DonutCard
+          title="Topup Amount Distribution"
+          data={data.topupAmountDistribution}
+          centerTitle="TOTAL AMOUNT"
+          centerValue={fmt(amtTotal)}
+        />
+      )}
+      {hasTransactionsDistribution && (
+        <DonutCard
+          title="Transactions Distribution"
+          data={data.transactionsDistribution.map((d) => ({ ...d, isCount: true }))}
+          centerTitle="TRANSACTIONS"
+          centerValue={txnTotal.toLocaleString()}
+        />
+      )}
+      {hasTopupPaymentDistribution && (
+        <PieCard
+          title="Topup Distribution"
+          data={data.topupPaymentDistribution}
+        />
+      )}
     </div>
   )
 }

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
 import atomxLogo from '../assets/AtomX_Logo.svg'
-import { dateRanges } from '../data/adminData'
+import { dateRanges } from '../services/api'
 
 export default function SelectPage({ onContinue, adminList, adminsLoading, adminsError }) {
   const [admin, setAdmin] = useState('')

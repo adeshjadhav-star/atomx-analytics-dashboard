@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion'
 import atomxLogo from '../assets/AtomX_Logo.svg'
-import { dateRanges } from '../data/adminData'
+import { dateRanges } from '../services/api'
 
 export default function DashboardNav({ config, onConfigChange, onGetData, loading, adminList }) {
   return (

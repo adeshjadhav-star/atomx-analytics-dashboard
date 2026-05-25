@@ -12,6 +12,16 @@ const DATE_RANGE_MAP = {
   all: ['2017-01-01', new Date().toISOString().slice(0, 10)],
 }
 
+export const dateRanges = [
+  { id: 'fy2324', label: 'FY-(2023-24)' },
+  { id: 'fy2223', label: 'FY-(2022-23)' },
+  { id: 'fy2122', label: 'FY-(2021-22)' },
+  { id: 'fy2021', label: 'FY-(2020-21)' },
+  { id: 'fy1920', label: 'FY-(2019-20)' },
+  { id: 'fy1819', label: 'FY-(2018-19)' },
+  { id: 'all', label: 'All Time' },
+]
+
 function asNumber(value) {
   const number = Number(value ?? 0)
   return Number.isFinite(number) ? number : 0
@@ -45,6 +55,8 @@ function normalizeEvent(item) {
     pos: asNumber(pick(item, ['pos', 'posAmount', 'pos_amount'])),
     returns: asNumber(pick(item, ['returns', 'returnAmount', 'return_amount'])),
     returnsCount: asNumber(pick(item, ['returnsCount', 'returns_count', 'returnCount', 'return_count'])),
+    breakage: asNumber(pick(item, ['breakage', 'breakageAmount', 'breakage_amount'])),
+    breakageCount: asNumber(pick(item, ['breakageCount', 'breakage_count'])),
     devices: asNumber(pick(item, ['devices', 'deviceCount', 'device_count'])),
     days: asNumber(pick(item, ['days', 'eventDays', 'event_days', 'dates'])),
     client: pick(item, ['client', 'clientName', 'client_name', 'admin'], ''),
@@ -62,6 +74,73 @@ function mapByEvent(events, key, valueKey) {
   }))
 }
 
+function mergeSeries(items, valueKey) {
+  const byEvent = new Map()
+
+  for (const item of items) {
+    const event = String(item.event ?? '')
+    if (!event) continue
+    byEvent.set(event, (byEvent.get(event) ?? 0) + asNumber(item[valueKey]))
+  }
+
+  return Array.from(byEvent, ([event, value]) => ({
+    event,
+    [valueKey]: value,
+  }))
+}
+
+function mergeDistributions(items) {
+  const byName = new Map()
+
+  for (const item of items) {
+    const name = String(item.name ?? '')
+    if (!name) continue
+
+    const existing = byName.get(name)
+    byName.set(name, {
+      name,
+      value: (existing?.value ?? 0) + asNumber(item.value),
+      color: existing?.color ?? item.color ?? COLORS[byName.size % COLORS.length],
+    })
+  }
+
+  return Array.from(byName.values())
+}
+
+function mergeDashboardData(results) {
+  const dataSets = results.map((result) => result.data)
+  const events = dataSets.flatMap((data) => data.events ?? [])
+
+  return {
+    summary: {
+      events: dataSets.reduce((total, data) => total + asNumber(data.summary?.events), 0),
+      topups: dataSets.reduce((total, data) => total + asNumber(data.summary?.topups), 0),
+      sales: dataSets.reduce((total, data) => total + asNumber(data.summary?.sales), 0),
+      pos: dataSets.reduce((total, data) => total + asNumber(data.summary?.pos), 0),
+      days: dataSets.reduce((total, data) => total + asNumber(data.summary?.days), 0),
+    },
+    topupByEvent: mergeSeries(dataSets.flatMap((data) => data.topupByEvent ?? []), 'amount'),
+    txnCountByEvent: mergeSeries(dataSets.flatMap((data) => data.txnCountByEvent ?? []), 'count'),
+    devicesByEvent: mergeSeries(dataSets.flatMap((data) => data.devicesByEvent ?? []), 'count'),
+    activationsByEvent: mergeSeries(dataSets.flatMap((data) => data.activationsByEvent ?? []), 'count'),
+    topupAmountDistribution: mergeDistributions(dataSets.flatMap((data) => data.topupAmountDistribution ?? [])),
+    transactionsDistribution: mergeDistributions(dataSets.flatMap((data) => data.transactionsDistribution ?? [])),
+    topupPaymentDistribution: mergeDistributions(dataSets.flatMap((data) => data.topupPaymentDistribution ?? [])),
+    events,
+  }
+}
+
+async function mapWithConcurrency(items, limit, mapper) {
+  const results = []
+
+  for (let index = 0; index < items.length; index += limit) {
+    const batch = items.slice(index, index + limit)
+    results.push(...await Promise.all(batch.map(mapper)))
+  }
+
+  return results
+}
+
 function normalizeDistribution(items, fallbackNames = []) {
   if (!Array.isArray(items)) return []
 
@@ -70,6 +149,85 @@ function normalizeDistribution(items, fallbackNames = []) {
     value: asNumber(pick(item, ['value', 'amount', 'count', 'total'])),
     color: pick(item, ['color'], COLORS[index % COLORS.length]),
   }))
+}
+
+function normalizeDistributionByNames(items, allowedNames, fallbackNames = allowedNames) {
+  const allowed = new Map(allowedNames.map((name) => [name.toLowerCase(), name]))
+
+  return normalizeDistribution(items, fallbackNames)
+    .map((item) => {
+      const rawName = item.name.toLowerCase()
+      const name =
+        rawName === 'topup' || rawName === 'topups'
+          ? allowed.get('topups') ?? allowed.get('topup')
+          : rawName === 'sale' || rawName === 'sales'
+            ? allowed.get('sales')
+            : rawName === 'return' || rawName === 'returns'
+              ? allowed.get('returns')
+              : rawName === 'breakage' || rawName === 'breakages'
+                ? allowed.get('breakage')
+                : item.name
+      const displayName = allowed.get(name.toLowerCase())
+      return displayName ? { ...item, name: displayName } : item
+    })
+    .filter((item) => allowed.has(item.name.toLowerCase()))
+}
+
+function nonZeroDistribution(items) {
+  return items.filter((item) => asNumber(item.value) > 0)
+}
+
+function remainingValue(total, used) {
+  return Math.max(asNumber(total) - asNumber(used), 0)
+}
+
+function breakageAmount(events) {
+  const explicit = sum(events, 'breakage')
+  if (explicit > 0) return explicit
+
+  return remainingValue(sum(events, 'topup'), sum(events, 'sales') + sum(events, 'returns'))
+}
+
+function breakageCount(events) {
+  const explicit = sum(events, 'breakageCount')
+  if (explicit > 0) return explicit
+
+  return remainingValue(
+    sum(events, 'txnCount'),
+    sum(events, 'salesCount') + sum(events, 'topupCount') + sum(events, 'returnsCount')
+  )
+}
+
+function withBreakageSlice(items, value) {
+  if (items.some((item) => item.name.toLowerCase() === 'breakage')) return items
+  if (value <= 0) return items
+
+  return [
+    ...items,
+    { name: 'Breakage', value, color: '#7C3AED' },
+  ]
+}
+
+function deriveTopupAmountDistribution(events) {
+  if (!events.length) return []
+
+  return nonZeroDistribution([
+    { name: 'Topup', value: sum(events, 'topup'), color: '#2563EB' },
+    { name: 'Sales', value: sum(events, 'sales'), color: '#14B8A6' },
+    { name: 'Returns', value: sum(events, 'returns'), color: '#64748B' },
+    { name: 'Breakage', value: breakageAmount(events), color: '#7C3AED' },
+  ])
+}
+
+function deriveTransactionsDistribution(events) {
+  if (!events.length) return []
+
+  return nonZeroDistribution([
+    { name: 'Sales', value: sum(events, 'salesCount'), color: '#2563EB' },
+    { name: 'Topups', value: sum(events, 'topupCount'), color: '#14B8A6' },
+    { name: 'Returns', value: sum(events, 'returnsCount'), color: '#64748B' },
+    { name: 'Breakage', value: breakageCount(events), color: '#7C3AED' },
+  ])
 }
 
 function unwrapPayload(json) {
@@ -87,6 +245,15 @@ function normalizeDashboardData(json) {
     return payload
   }
 
+  const topupAmountDistribution = normalizeDistributionByNames(
+    pick(source, ['topupAmountDistribution', 'topup_amount_distribution']),
+    ['Topup', 'Sales', 'Returns', 'Breakage']
+  )
+  const transactionsDistribution = normalizeDistributionByNames(
+    pick(source, ['transactionsDistribution', 'transactions_distribution']),
+    ['Sales', 'Topups', 'Returns', 'Breakage']
+  )
+
   return {
     summary: {
       events: asNumber(pick(source, ['eventsCount', 'eventCount', 'totalEvents'], events.length)),
@@ -99,42 +266,17 @@ function normalizeDashboardData(json) {
     txnCountByEvent: pick(source, ['txnCountByEvent', 'txn_count_by_event'], mapByEvent(events, 'txnCount', 'count')),
     devicesByEvent: pick(source, ['devicesByEvent', 'devices_by_event'], mapByEvent(events, 'devices', 'count')),
     activationsByEvent: pick(source, ['activationsByEvent', 'activations_by_event'], mapByEvent(events, 'activations', 'count')),
-    topupAmountDistribution: normalizeDistribution(
-      pick(source, ['topupAmountDistribution', 'topup_amount_distribution']),
-      ['Topup', 'Sales', 'Returns', 'Breakage']
-    ),
-    transactionsDistribution: normalizeDistribution(
-      pick(source, ['transactionsDistribution', 'transactions_distribution']),
-      ['Sales', 'Topups', 'Returns', 'Breakage']
-    ),
+    topupAmountDistribution: topupAmountDistribution.length
+      ? withBreakageSlice(topupAmountDistribution, breakageAmount(events))
+      : deriveTopupAmountDistribution(events),
+    transactionsDistribution: transactionsDistribution.length
+      ? withBreakageSlice(transactionsDistribution, breakageCount(events))
+      : deriveTransactionsDistribution(events),
     topupPaymentDistribution: normalizeDistribution(
       pick(source, ['topupPaymentDistribution', 'topup_payment_distribution', 'paymentDistribution', 'payment_distribution', 'dataTopup']),
       ['CASH', 'CARD', 'COUPON', 'COMP']
     ),
     events,
-  }
-}
-
-function withFallbackDistributions(data) {
-  return {
-    ...data,
-    topupAmountDistribution: data.topupAmountDistribution.length
-      ? data.topupAmountDistribution
-      : [
-          { name: 'Topup', value: data.summary.topups, color: '#2563EB' },
-          { name: 'Sales', value: data.summary.sales, color: '#14B8A6' },
-          { name: 'Returns', value: sum(data.events, 'returns'), color: '#64748B' },
-        ],
-    transactionsDistribution: data.transactionsDistribution.length
-      ? data.transactionsDistribution
-      : [
-          { name: 'Transactions', value: sum(data.events, 'txnCount'), color: '#2563EB' },
-          { name: 'Topups', value: sum(data.events, 'topupCount'), color: '#14B8A6' },
-          { name: 'Sales', value: sum(data.events, 'salesCount'), color: '#7C3AED' },
-        ],
-    topupPaymentDistribution: data.topupPaymentDistribution.length
-      ? data.topupPaymentDistribution
-      : [{ name: 'Topup', value: data.summary.topups, color: '#2563EB' }],
   }
 }
 
@@ -165,8 +307,33 @@ export async function fetchDashboardData(adminId, dateRangeId) {
     throw new Error(message)
   }
 
-  const data = withFallbackDistributions(normalizeDashboardData(await res.json()))
+  const data = normalizeDashboardData(await res.json())
   return { data, live: true }
+}
+
+export async function fetchDashboardDataForSelection(adminId, dateRangeId, admins = []) {
+  if (adminId !== 'all') {
+    return fetchDashboardData(adminId, dateRangeId)
+  }
+
+  const adminIds = admins
+    .map((admin) => admin.id)
+    .filter((id) => id && id !== 'all')
+
+  if (!adminIds.length) {
+    return fetchDashboardData(adminId, dateRangeId)
+  }
+
+  const results = await mapWithConcurrency(
+    adminIds,
+    4,
+    (id) => fetchDashboardData(id, dateRangeId)
+  )
+
+  return {
+    data: mergeDashboardData(results),
+    live: true,
+  }
 }
 
 export async function fetchAdminList() {

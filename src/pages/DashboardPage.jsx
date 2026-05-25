@@ -6,8 +6,7 @@ import TopupBarChart from '../components/TopupBarChart'
 import DistributionCharts from '../components/DistributionCharts'
 import CountCharts from '../components/CountCharts'
 import EventsTable from '../components/EventsTable'
-import { fetchDashboardData } from '../services/api'
-import { dateRanges } from '../data/adminData'
+import { dateRanges, fetchDashboardDataForSelection } from '../services/api'
 
 function SectionTitle({ children }) {
   return (
@@ -41,14 +40,14 @@ export default function DashboardPage({ config: initialConfig, adminList }) {
     setLoading(true)
     setError(null)
     try {
-      const { data: result } = await fetchDashboardData(cfg.admin, cfg.dateRange)
+      const { data: result } = await fetchDashboardDataForSelection(cfg.admin, cfg.dateRange, adminList)
       setData(result)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load data. Please try again.')
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [adminList])
 
   const adminName = adminList.find((a) => a.id === config.admin)?.name ?? 'All'
   const selectedDateRange = dateRanges.find((d) => d.id === config.dateRange)
